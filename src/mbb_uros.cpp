@@ -5,6 +5,9 @@
 #include <geometry_msgs/msg/twist.h>
 #include <nav_msgs/msg/odometry.h>
 
+#include <esp_log.h>
+#include <esp_intr_alloc.h>
+
 #include "main.h"
 #include "mbb_uros.h"
 
@@ -21,7 +24,6 @@ rclc_executor_t mbb_uros_executor;
 geometry_msgs__msg__Twist mbb_uros_sub_allocated_msg;
 
 
-
 #define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){error_loop();}}
 #define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){}}
 
@@ -35,8 +37,10 @@ static void error_loop() {
 static void mbb_uros_sub_callback(const void * msgin)
 {
     const geometry_msgs__msg__Twist * msg = (const geometry_msgs__msg__Twist *)msgin;
-
     ESP_LOGI(MBB_UROS_LOG_TAG, "%f, %f", msg->linear.x, msg->angular.z);
+
+    // Send the message to the queue
+    xQueueSend(mbb_uros_cmd_vel_queue, msg, 0);
 }
 
 static void mbb_uros_hw_init(void) 
@@ -92,6 +96,11 @@ void mbb_uros_task_init(void)
                                         ON_NEW_DATA));
 
     ESP_LOGI(MBB_UROS_LOG_TAG, "micro-ROS initialized");
+
+    // Create the queues
+    mbb_uros_odom_queue = xQueueCreate(MBB_UROS_ODOM_QUEUE_SIZE, sizeof(nav_msgs__msg__Odometry));
+    mbb_uros_cmd_vel_queue = xQueueCreate(MBB_UROS_CMD_VEL_QUEUE_SIZE, sizeof(geometry_msgs__msg__Twist));
+
     delay(1000);
 }
 

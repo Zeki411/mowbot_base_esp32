@@ -7,7 +7,7 @@
 #define MBB_UROS_UART_BAUDRATE 115200
 
 // Logging configuration
-#define MBB_UROS_LOG_LEVEL ESP_LOG_INFO
+#define MBB_UROS_LOG_LEVEL ESP_LOG_ERROR
 #define MBB_UROS_LOG_TAG "mbb-uros"
 
 // uROS node configuration
@@ -17,11 +17,17 @@
 #define MBB_UROS_PUB_TOPIC_NAME "/mowbot_base/odom"
 
 
+#define MBB_UROS_ODOM_QUEUE_SIZE 1
+#define MBB_UROS_CMD_VEL_QUEUE_SIZE 1
+
 
 // Task configuration
 #define MBB_UROS_TASK_STACK_SIZE 4096
-#define MBB_UROS_TASK_PRIORITY 10
+#define MBB_UROS_TASK_PRIORITY 5
 
+
+extern QueueHandle_t mbb_uros_odom_queue;
+extern QueueHandle_t mbb_uros_cmd_vel_queue;
 
 extern void mbb_uros_task_init(void);
 extern void mbb_uros_task_start(void);

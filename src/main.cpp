@@ -1,9 +1,5 @@
 #include "main.h"
 
-
-
-
-
 void setup() {
   // UART configuration
 

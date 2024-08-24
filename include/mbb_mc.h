@@ -1,23 +1,23 @@
-#ifndef __MBB_MOTOR_CONTROLLER_DEFINE_H__
-#define __MBB_MOTOR_CONTROLLER_DEFINE_H__
+#ifndef __MBB_MC_H__
+#define __MBB_MC_H__
 
-#include <Arduino.h>
+#include <stdint.h>
 
-// Macro to swap bytes in a 16-bit value
-#define SWAP_MSB_LSB_16(val) (((val) >> 8) | ((val) << 8))
 
-// Macro to swap bytes in a 32-bit value
-#define SWAP_MSB_LSB_32(val) ((((val) >> 24) & 0x000000FF) | \
-                            (((val) >> 8) & 0x0000FF00)  | \
-                            (((val) << 8) & 0x00FF0000)  | \
-                            (((val) << 24) & 0xFF000000))
+#define MBB_MC_WHEEL_RADIUS 0.125 // meters
+
+// Logging configuration
+#define MBB_MC_LOG_TAG "mbb-mc"
+#define MBB_MC_LOG_LEVEL ESP_LOG_INFO
 
 // UART configuration
-#define MBB_MC_UART_RX_BUFF_SIZE 1024
 #define MBB_MC_UART_NUM UART_NUM_2
 #define MBB_MC_UART_RX_IO 16
 #define MBB_MC_UART_TX_IO 17
 #define MBB_MC_UART_BAUDRATE 19200
+#define MBB_MC_UART_RX_BUFF_SIZE 1024
+#define MBB_MC_UART_TX_BUFF_SIZE 0
+#define MBB_MC_UART_QUEUE_SIZE 10
 
 // UART RX message info
 #define MBB_MC_UART_MSG_HEADER_LEN 4
@@ -29,7 +29,6 @@
 #define MBB_MC_UART_MSG_RX_RUN_DATA_LEN 26
 #define MBB_MC_UART_MSG_RX_RUN_DATA_FIX1 0x11
 #define MBB_MC_UART_MSG_RX_RUN_DATA_FIX2 0x00
-
 
 // PWM configuration
 #define MBB_MC_PWM_1_IO 18
@@ -44,10 +43,28 @@ constexpr int MBB_MC_PWM_VAL_SPEED_MAX_NEG = ((1 << MBB_MC_PWM_RESOLUTION) - 1) 
 constexpr int MBB_MC_PWM_VAL_SPEED_MAX_POS = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 9.75 / 100; // 9.75% duty cycle ~ 1.95ms pulse width at 50Hz
 
 
+// MBB MC task
+#define MBB_MC_MONITOR_TASK_STACK_SIZE 4096
+#define MBB_MC_MONITOR_TASK_PRIORITY 5
+#define MBB_MC_CONTROL_TASK_STACK_SIZE 4096
+#define MBB_MC_CONTROL_TASK_PRIORITY 5
+
+
+
 typedef enum {
     MBB_MC_RX_MSG_RUN_MODE = 0,
     MBB_MC_RX_MSG_SET_MODE = 1,
-} MBBMotorController_RxMsgMode_t;
+} mbb_mc_msg_rx_mode_t;
+
+typedef union{
+    struct {
+        uint8_t header1 : 8;
+        uint8_t header2 : 8;
+        uint8_t data_len : 8;
+        uint8_t cmd: 8;
+    }__attribute__((packed));  // Ensures no padding between fields
+    uint8_t raw[MBB_MC_UART_MSG_HEADER_LEN];
+} mbb_mc_msg_header_t;
 
 typedef union{
     struct{
@@ -63,32 +80,22 @@ typedef union{
     }__attribute__((packed));  // Ensures no padding between fields
 
     uint8_t raw[2];
-} MBBMotorController_MotorStatus_t;
-
-typedef union{
-    struct {
-        uint8_t header1 : 8;
-        uint8_t header2 : 8;
-        uint8_t data_len : 8;
-        uint8_t cmd: 8;
-    }__attribute__((packed));  // Ensures no padding between fields
-    uint8_t raw[MBB_MC_UART_MSG_HEADER_LEN];
-} MBBMotorController_MsgHeader_t;
+} mbb_mc_msg_rx_motor_status_t;
 
 typedef union{
     struct{
         // data
         uint8_t fix1: 8;
         uint8_t fix2: 8;
-        int32_t m1data: 32;
-        int32_t m2data: 32;
-        uint16_t m1current: 16;
-        uint16_t m2current: 16;
-        uint16_t m1temp: 16;
-        uint16_t m2temp: 16;
-        uint16_t supply_vol: 16;
-        uint16_t m1status : 16;
-        uint16_t m2status : 16;
+        uint8_t m1data[4];
+        uint8_t m2data[4];
+        uint8_t m1current[2];
+        uint8_t m2current[2];
+        uint8_t m1temp[2];
+        uint8_t m2temp[2];
+        uint8_t supply_vol[2];
+        uint8_t m1status[2];
+        uint8_t m2status[2];
 
         // unknown
         uint8_t unknown1: 8;
@@ -96,13 +103,26 @@ typedef union{
     }__attribute__((packed));  // Ensures no padding between fields
 
     uint8_t raw[MBB_MC_UART_MSG_RX_RUN_DATA_LEN];
-} MBBMotorController_MsgRxRunData_t;
+} mbb_mc_msg_rx_run_data_t;
 
-/* -------------- */
+typedef struct{
+    float speed_m1;
+    float speed_m2;
+    float current_m1;
+    float current_m2;
+    float temp_m1;
+    float temp_m2;
+    float supply_vol;
+    mbb_mc_msg_rx_motor_status_t status_m1;
+    mbb_mc_msg_rx_motor_status_t status_m2;
+} mbb_mc_run_state_t;
 
-typedef struct {
-    //TODO
 
-} MBBMotorController_RunningStatus_t;
 
-#endif // __MBB_MOTOR_CONTROLLER_DEFINE_H__
+
+
+extern void mbb_mc_task_init(void);
+extern void mbb_mc_task_start(void);
+extern void mbb_mc_task_stop(void);
+
+#endif // __MBB_MC_H__  
