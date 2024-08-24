@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 #include "driver/uart.h"
-#include "freeRTOS/task.h"
+#include "freertos/task.h"
 
 #include "mbb_motor_controller_define.h"
 

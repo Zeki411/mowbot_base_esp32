@@ -7,9 +7,7 @@
 #include "mbb_motor_controller.h"
 
 
-
-
-
+extern HardwareSerial uROS_Serial;
 
 
 extern int mbb_main(void);

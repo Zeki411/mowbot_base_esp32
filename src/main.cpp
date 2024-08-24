@@ -1,6 +1,7 @@
 #include "main.h"
 
-HardwareSerial uROS_Serial(1);
+
+
 
 
 void setup() {
@@ -9,7 +10,7 @@ void setup() {
   //Set UART log level
 	// esp_log_level_set(TAG, LOG_LEVEL);
 
-  uROS_Serial.begin(115200, SERIAL_8N1, 26, 27);
+
 
   
 
@@ -29,7 +30,5 @@ void setup() {
 }
 
 void loop() {
-  // mbb_main();
-  uROS_Serial.println("Hello World");
-  delay(1000);
+  mbb_main();
 }
