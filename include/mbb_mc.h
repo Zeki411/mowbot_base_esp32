@@ -5,7 +5,7 @@
 
 #define MAP_RANGE(x, xmin, xmax, ymin, ymax) \
     ((ymin) + (((x) - (xmin)) * ((ymax) - (ymin)) / ((xmax) - (xmin))))
-    
+
 // Logging configuration
 #define MBB_MC_LOG_TAG "mbb-mc"
 #define MBB_MC_LOG_LEVEL ESP_LOG_INFO
@@ -62,10 +62,7 @@ constexpr int MBB_MC_PWM_VAL_RPM_MAX_NEG = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 
  * It need to be smaller than the smallest max RPM value of the 2 motors.
  */
 #define MBB_MC_MOTOR_RPM_LIMIT 2700 // RPM
-
-// #define MBB_MC_MOTOR_1_PWM_LIMIT_POS ((MBB_MC_MOTOR_1_RPM_MEASURE_MAX * MBB_MC_MOTOR_RPM_LIMIT) / MBB_MC_MOTOR_1_RPM_MEASURE_MAX)
-
-// #define MBB_MC_VELOCITY_MAX ((2 * MBB_MC_MOTOR_RPM_LIMIT * 3.14159 * MBB_MC_WHEEL_RADIUS) / 60) // m/s
+#define MBB_MC_VELOCITY_LIMIT ((2 * (MBB_MC_MOTOR_RPM_LIMIT / MBB_MC_MOTOR_GEAR_RATIO) * 3.14159 * MBB_MC_WHEEL_RADIUS) / 60) // m/s
 
 
 

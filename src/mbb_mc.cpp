@@ -33,8 +33,6 @@ static void mbb_mc_set_pwm_2(int pwm_val)
 
 static void mbb_mc_process_run_data(mbb_mc_msg_rx_run_data_t *run_data)
 {
-    int32_t m1_data = 0;
-    int32_t m2_data = 0;
 
     // Process run data
     mbb_mc_run_state.current_m1 = (run_data->m1current[0] << 8 | run_data->m1current[1]) * 0.1;
@@ -49,12 +47,11 @@ static void mbb_mc_process_run_data(mbb_mc_msg_rx_run_data_t *run_data)
     //         mbb_mc_run_state.temp_m1,\
     //         mbb_mc_run_state.temp_m2,\
     //         mbb_mc_run_state.supply_vol);
-    
 
-    m1_data = (run_data->m1data[0] << 24 | run_data->m1data[1] << 16 | run_data->m1data[2] << 8 | run_data->m1data[3]);
-    m2_data = (run_data->m2data[0] << 24 | run_data->m2data[1] << 16 | run_data->m2data[2] << 8 | run_data->m2data[3]);
+    mbb_mc_run_state.m1_rpm = (run_data->m1data[0] << 24 | run_data->m1data[1] << 16 | run_data->m1data[2] << 8 | run_data->m1data[3]);
+    mbb_mc_run_state.m2_rpm = (run_data->m2data[0] << 24 | run_data->m2data[1] << 16 | run_data->m2data[2] << 8 | run_data->m2data[3]);
 
-    ESP_LOGI(MBB_MC_LOG_TAG, "M1 Data: %d, M2 Data: %d", m1_data, m2_data);
+    ESP_LOGI(MBB_MC_LOG_TAG, "M1 RPM: %d, M2 RPM: %d", mbb_mc_run_state.m1_rpm, mbb_mc_run_state.m2_rpm);
 
 
     // Calculate odom
@@ -110,11 +107,10 @@ static void mbb_mc_monitor_task(void *arg)
  */
 static int mbb_mc_vel_to_pwm(double v, double max_rpm)
 {
-    double v_max = ((2 * (MBB_MC_MOTOR_RPM_LIMIT / MBB_MC_MOTOR_GEAR_RATIO) * 3.14159 * MBB_MC_WHEEL_RADIUS) / 60);
-    if (v > v_max) {
-        v = v_max;
-    } else if (v < (-1 * v_max)) {
-        v = (-1 * v_max);
+    if (v > MBB_MC_VELOCITY_LIMIT) {
+        v = MBB_MC_VELOCITY_LIMIT;
+    } else if (v < (-1 * MBB_MC_VELOCITY_LIMIT)) {
+        v = (-1 * MBB_MC_VELOCITY_LIMIT);
     }
 
     // Map the limit RPM to the corresponding PWM value
@@ -123,7 +119,7 @@ static int mbb_mc_vel_to_pwm(double v, double max_rpm)
     int pwm_limit_neg = MAP_RANGE(-1 * MBB_MC_MOTOR_RPM_LIMIT, -1 * max_rpm, max_rpm, MBB_MC_PWM_VAL_RPM_MAX_NEG, MBB_MC_PWM_VAL_RPM_MAX_POS);
 
     // Map the velocity to the corresponding PWM value in the range of the limit PWM values
-    int pwm_value = MAP_RANGE(v, -1 * v_max, v_max, pwm_limit_neg, pwm_limit_pos);
+    int pwm_value = MAP_RANGE(v, -1 * MBB_MC_VELOCITY_LIMIT, MBB_MC_VELOCITY_LIMIT, pwm_limit_neg, pwm_limit_pos);
 
     return pwm_value;
 }
