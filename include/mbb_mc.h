@@ -3,12 +3,9 @@
 
 #include <stdint.h>
 
-//TODO: Replace with actual values
-#define MBB_MC_WHEEL_RADIUS 0.125 // meters
-#define MBB_MC_DISTANCE_BETWEEN_WHEEL_SIDES 0.5 // meters
-#define MBB_MC_VELOCITY_MAX 1.0 // m/s --> RPM: 60 * V / (2 * pi * r) = 76.39 RPM
-
-
+#define MAP_RANGE(x, xmin, xmax, ymin, ymax) \
+    ((ymin) + (((x) - (xmin)) * ((ymax) - (ymin)) / ((xmax) - (xmin))))
+    
 // Logging configuration
 #define MBB_MC_LOG_TAG "mbb-mc"
 #define MBB_MC_LOG_LEVEL ESP_LOG_INFO
@@ -41,9 +38,40 @@
 #define MBB_MC_PWM_FREQ 50
 #define MBB_MC_PWM_RESOLUTION 16
 
-constexpr int MBB_MC_PWM_VAL_SPEED_ZERO = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 7.5  / 100; // 7.5% duty cycle ~ 1.5ms pulse width at 50Hz
-constexpr int MBB_MC_PWM_VAL_SPEED_MAX_NEG = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 5.25 / 100; // 5.25% duty cycle ~ 1.05ms pulse width at 50Hz
-constexpr int MBB_MC_PWM_VAL_SPEED_MAX_POS = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 9.75 / 100; // 9.75% duty cycle ~ 1.95ms pulse width at 50Hz
+//TODO: Need to measure and replace with actual values
+#define MBB_MC_WHEEL_RADIUS 0.125 // meters
+#define MBB_MC_DISTANCE_BETWEEN_WHEEL_SIDES 0.5 // meters
+#define MBB_MC_MOTOR_GEAR_RATIO 36 // 1:36
+
+constexpr int MBB_MC_PWM_VAL_RPM_ZERO = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 7.5  / 100; // 7.5% duty cycle ~ 1.5ms pulse width at 50Hz
+// constexpr int MBB_MC_PWM_VAL_RPM_MAX_POS = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 5.25 / 100; // 5.25% duty cycle ~ 1.05ms pulse width at 50Hz
+// constexpr int MBB_MC_PWM_VAL_RPM_MAX_NEG = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 9.75 / 100; // 9.75% duty cycle ~ 1.95ms pulse width at 50Hz
+
+constexpr int MBB_MC_PWM_VAL_RPM_MAX_POS = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 5/ 100; // 5% duty cycle ~ 1.0ms pulse width at 50Hz
+constexpr int MBB_MC_PWM_VAL_RPM_MAX_NEG = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 10 / 100; // 10% duty cycle ~ 2.0ms pulse width at 50Hz
+
+/*
+ * These value are measured from the motor corresponding to the max/min PWM values, max is 3000 RPM (in specs).
+ * They may be needed to be calibrated again.
+ */
+#define MBB_MC_MOTOR_1_RPM_MEASURE_MAX 2745 // 2745 RPM at 5% duty cycle, -2745 RPM at 10% duty cycle
+#define MBB_MC_MOTOR_2_RPM_MEASURE_MAX 2870 // 2870 RPM at 5% duty cycle, -2870 RPM at 10% duty cycle
+
+/*
+ * This value is the user chosen limits to sync 2 motors at same max RPM.
+ * It need to be smaller than the smallest max RPM value of the 2 motors.
+ */
+#define MBB_MC_MOTOR_RPM_LIMIT 2700 // RPM
+
+// #define MBB_MC_MOTOR_1_PWM_LIMIT_POS ((MBB_MC_MOTOR_1_RPM_MEASURE_MAX * MBB_MC_MOTOR_RPM_LIMIT) / MBB_MC_MOTOR_1_RPM_MEASURE_MAX)
+
+// #define MBB_MC_VELOCITY_MAX ((2 * MBB_MC_MOTOR_RPM_LIMIT * 3.14159 * MBB_MC_WHEEL_RADIUS) / 60) // m/s
+
+
+
+
+
+
 
 
 
@@ -110,13 +138,13 @@ typedef union{
 } mbb_mc_msg_rx_run_data_t;
 
 typedef struct{
-    float speed_m1;
-    float speed_m2;
-    float current_m1;
-    float current_m2;
-    float temp_m1;
-    float temp_m2;
-    float supply_vol;
+    double m1_rpm;
+    double m2_rpm;
+    double current_m1;
+    double current_m2;
+    double temp_m1;
+    double temp_m2;
+    double supply_vol;
     mbb_mc_msg_rx_motor_status_t status_m1;
     mbb_mc_msg_rx_motor_status_t status_m2;
 } mbb_mc_run_state_t;
