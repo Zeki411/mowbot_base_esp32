@@ -37,7 +37,7 @@ static void error_loop() {
 static void mbb_uros_sub_callback(const void * msgin)
 {
     const geometry_msgs__msg__Twist * msg = (const geometry_msgs__msg__Twist *)msgin;
-    ESP_LOGI(MBB_UROS_LOG_TAG, "%f, %f", msg->linear.x, msg->angular.z);
+    // ESP_LOGI(MBB_UROS_LOG_TAG, "%f, %f", msg->linear.x, msg->angular.z);
 
     // Send the message to the queue
     xQueueSend(mbb_uros_cmd_vel_queue, msg, 0);

@@ -3,8 +3,11 @@
 
 #include <stdint.h>
 
-
+//TODO: Replace with actual values
 #define MBB_MC_WHEEL_RADIUS 0.125 // meters
+#define MBB_MC_DISTANCE_BETWEEN_WHEEL_SIDES 0.5 // meters
+#define MBB_MC_VELOCITY_MAX 1.0 // m/s --> RPM: 60 * V / (2 * pi * r) = 76.39 RPM
+
 
 // Logging configuration
 #define MBB_MC_LOG_TAG "mbb-mc"
@@ -31,8 +34,8 @@
 #define MBB_MC_UART_MSG_RX_RUN_DATA_FIX2 0x00
 
 // PWM configuration
-#define MBB_MC_PWM_1_IO 18
-#define MBB_MC_PWM_2_IO 19
+#define MBB_MC_PWM_1_IO 19
+#define MBB_MC_PWM_2_IO 18
 #define MBB_MC_PWM_1_CHANNEL 0
 #define MBB_MC_PWM_2_CHANNEL 1
 #define MBB_MC_PWM_FREQ 50
@@ -41,6 +44,7 @@
 constexpr int MBB_MC_PWM_VAL_SPEED_ZERO = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 7.5  / 100; // 7.5% duty cycle ~ 1.5ms pulse width at 50Hz
 constexpr int MBB_MC_PWM_VAL_SPEED_MAX_NEG = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 5.25 / 100; // 5.25% duty cycle ~ 1.05ms pulse width at 50Hz
 constexpr int MBB_MC_PWM_VAL_SPEED_MAX_POS = ((1 << MBB_MC_PWM_RESOLUTION) - 1) * 9.75 / 100; // 9.75% duty cycle ~ 1.95ms pulse width at 50Hz
+
 
 
 // MBB MC task

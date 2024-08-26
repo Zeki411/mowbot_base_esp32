@@ -20,6 +20,17 @@ static TaskHandle_t mbb_mc_control_task_handle;
 static mbb_mc_msg_rx_mode_t mbb_mc_rx_msg_mode = MBB_MC_RX_MSG_RUN_MODE;
 static mbb_mc_run_state_t mbb_mc_run_state;
 
+static void mbb_mc_set_pwm_1(int pwm_val)
+{
+    ledcWrite(MBB_MC_PWM_1_CHANNEL, pwm_val);
+}
+
+static void mbb_mc_set_pwm_2(int pwm_val)
+{
+    ledcWrite(MBB_MC_PWM_2_CHANNEL, pwm_val);
+}
+
+
 static void mbb_mc_process_run_data(mbb_mc_msg_rx_run_data_t *run_data)
 {
     // Process run data
@@ -29,12 +40,14 @@ static void mbb_mc_process_run_data(mbb_mc_msg_rx_run_data_t *run_data)
     mbb_mc_run_state.temp_m2 = (run_data->m2temp[0] << 8 | run_data->m2temp[1]) * 0.1;
     mbb_mc_run_state.supply_vol = (run_data->supply_vol[0] << 8 | run_data->supply_vol[1]) * 0.1;
 
-    ESP_LOGI(MBB_MC_LOG_TAG, "M1 Current: %.2f, M2 Current: %.2f, M1 Temp: %.2f, M2 Temp: %.2f, Supply Voltage: %.2f",\
-            mbb_mc_run_state.current_m1,\
-            mbb_mc_run_state.current_m2,\
-            mbb_mc_run_state.temp_m1,\
-            mbb_mc_run_state.temp_m2,\
-            mbb_mc_run_state.supply_vol);
+    // ESP_LOGI(MBB_MC_LOG_TAG, "M1 Current: %.2f, M2 Current: %.2f, M1 Temp: %.2f, M2 Temp: %.2f, Supply Voltage: %.2f",\
+    //         mbb_mc_run_state.current_m1,\
+    //         mbb_mc_run_state.current_m2,\
+    //         mbb_mc_run_state.temp_m1,\
+    //         mbb_mc_run_state.temp_m2,\
+    //         mbb_mc_run_state.supply_vol);
+
+    
 
     // Calculate odom
 
@@ -83,6 +96,37 @@ static void mbb_mc_monitor_task(void *arg)
     free(data);
 }
 
+static int mbb_mc_vel_to_pwm(double v)
+{
+    // Ensure the input value is clamped between -1 and 1
+    if (v > MBB_MC_VELOCITY_MAX) {
+        v = MBB_MC_VELOCITY_MAX;
+    } else if (v < (-1 * MBB_MC_VELOCITY_MAX)) {
+        v = (-1 * MBB_MC_VELOCITY_MAX);
+    }
+
+    // Map the velocity to the corresponding PWM value
+    int pwm_value = (int)(MBB_MC_PWM_VAL_SPEED_MAX_NEG + 
+                         ((v + MBB_MC_VELOCITY_MAX) / 2.0) * (MBB_MC_PWM_VAL_SPEED_MAX_POS - MBB_MC_PWM_VAL_SPEED_MAX_NEG));
+
+    return pwm_value;
+}
+
+static void mbb_mc_process_cmd_vel(geometry_msgs__msg__Twist *cmd_vel_data)
+{
+    // Process cmd_vel
+    double v_left = cmd_vel_data->linear.x - (cmd_vel_data->angular.z * MBB_MC_DISTANCE_BETWEEN_WHEEL_SIDES / 2);
+    double v_right = cmd_vel_data->linear.x + (cmd_vel_data->angular.z * MBB_MC_DISTANCE_BETWEEN_WHEEL_SIDES / 2);
+
+    int pwm_left = mbb_mc_vel_to_pwm(v_left);
+    int pwm_right = mbb_mc_vel_to_pwm(v_right);
+
+    // ESP_LOGI(MBB_MC_LOG_TAG, "PWM Left: %d, PWM Right: %d", pwm_left, pwm_right);
+
+    mbb_mc_set_pwm_1(pwm_left);
+    mbb_mc_set_pwm_2(pwm_right);
+}
+
 static void mbb_mc_control_task(void *arg)
 {
     geometry_msgs__msg__Twist cmd_vel_data;
@@ -91,7 +135,9 @@ static void mbb_mc_control_task(void *arg)
         if(xQueueReceive(mbb_uros_cmd_vel_queue, &cmd_vel_data, portMAX_DELAY))
         {
             // Process cmd_vel
-            ESP_LOGI(MBB_MC_LOG_TAG, "Received cmd_vel: %f, %f", cmd_vel_data.linear.x, cmd_vel_data.angular.z);
+            // ESP_LOGI(MBB_MC_LOG_TAG, "Received cmd_vel: %f, %f", cmd_vel_data.linear.x, cmd_vel_data.angular.z);
+            mbb_mc_process_cmd_vel(&cmd_vel_data);
+            
         }
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
@@ -130,6 +176,14 @@ void mbb_mc_hw_init(void)
     // Config PWM
     ledcSetup(MBB_MC_PWM_1_CHANNEL, MBB_MC_PWM_FREQ, MBB_MC_PWM_RESOLUTION);
     ledcSetup(MBB_MC_PWM_2_CHANNEL, MBB_MC_PWM_FREQ, MBB_MC_PWM_RESOLUTION);
+
+    // Attach the channel to the GPIO to be controlled
+    ledcAttachPin(MBB_MC_PWM_1_IO, MBB_MC_PWM_1_CHANNEL);
+    ledcAttachPin(MBB_MC_PWM_2_IO, MBB_MC_PWM_2_CHANNEL);
+
+    // Set the PWM duty cycle to the default value
+    ledcWrite(MBB_MC_PWM_1_CHANNEL, MBB_MC_PWM_VAL_SPEED_ZERO);
+    ledcWrite(MBB_MC_PWM_2_CHANNEL, MBB_MC_PWM_VAL_SPEED_ZERO);
 }
 
 void mbb_mc_task_init(void)
