@@ -13,12 +13,28 @@
 #include "mbb_uros.h"
 #include "main.h"
 
+#include <rosidl_runtime_c/string_functions.h>
+
 static QueueHandle_t mbb_mc_uart_rx_queue;
 static TaskHandle_t mbb_mc_monitor_task_handle;
 static TaskHandle_t mbb_mc_control_task_handle;
 
 static mbb_mc_msg_rx_mode_t mbb_mc_rx_msg_mode = MBB_MC_RX_MSG_RUN_MODE;
 static mbb_mc_run_state_t mbb_mc_run_state;
+
+typedef struct {
+    double x;
+    double y;
+    double z;
+    double roll;
+    double pitch;
+    double yaw;
+} mbb_mc_odom_t;
+
+static mbb_mc_odom_t mbb_mc_odom;
+static int64_t mbb_mc_last_odom_time;
+
+// nav_msgs__msg__Odometry mbb_mc_last_odom;
 
 static void mbb_mc_set_pwm_1(int pwm_val)
 {
@@ -29,7 +45,6 @@ static void mbb_mc_set_pwm_2(int pwm_val)
 {
     ledcWrite(MBB_MC_PWM_2_CHANNEL, pwm_val);
 }
-
 
 static void mbb_mc_process_run_data(mbb_mc_msg_rx_run_data_t *run_data)
 {
@@ -51,12 +66,105 @@ static void mbb_mc_process_run_data(mbb_mc_msg_rx_run_data_t *run_data)
     mbb_mc_run_state.m1_rpm = (run_data->m1data[0] << 24 | run_data->m1data[1] << 16 | run_data->m1data[2] << 8 | run_data->m1data[3]);
     mbb_mc_run_state.m2_rpm = (run_data->m2data[0] << 24 | run_data->m2data[1] << 16 | run_data->m2data[2] << 8 | run_data->m2data[3]);
 
-    ESP_LOGI(MBB_MC_LOG_TAG, "M1 RPM: %d, M2 RPM: %d", mbb_mc_run_state.m1_rpm, mbb_mc_run_state.m2_rpm);
-
+    // ESP_LOGI(MBB_MC_LOG_TAG, "M1 RPM: %d, M2 RPM: %d", mbb_mc_run_state.m1_rpm, mbb_mc_run_state.m2_rpm);
 
     // Calculate odom
 
-    // Send odom to uROS
+    // get delta time in microseconds
+    // int64_t delta_time = esp_timer_get_time() - mbb_mc_odom_prev_time;
+    // mbb_mc_odom_prev_time = esp_timer_get_time();
+    
+    int64_t current_time_ms = mbb_uros_get_epoch_millis();
+
+    // ESP_LOGI(MBB_MC_LOG_TAG, "Odom sec: %d, Odom ns: %d", mbb_mc_last_odom.header.stamp.sec, mbb_mc_last_odom.header.stamp.nanosec);
+    // int64_t last_time_ms = (int64_t)mbb_mc_last_odom.header.stamp.sec * 1000 +\
+    //             (int64_t)mbb_mc_last_odom.header.stamp.nanosec / 1000000;
+    int64_t delta_time_ms = current_time_ms - mbb_mc_last_odom_time;
+    if (delta_time_ms < 0)
+    {
+        ESP_LOGE(MBB_MC_LOG_TAG, "Negative delta time");
+        return;
+    }
+    mbb_mc_last_odom_time = current_time_ms;
+    
+    // update odom
+    double delta_time_s = (double)delta_time_ms / 1000;
+    double m1_vel = ( (double)mbb_mc_run_state.m1_rpm / MBB_MC_MOTOR_GEAR_RATIO ) * MBB_MC_WHEEL_RADIUS * 2 * M_PI / 60; // m/s
+    double m2_vel = ( (double)mbb_mc_run_state.m2_rpm / MBB_MC_MOTOR_GEAR_RATIO ) * MBB_MC_WHEEL_RADIUS * 2 * M_PI / 60; // m/s
+
+    double delta_s = delta_time_s * (m1_vel + m2_vel) / 2;
+    double delta_theta = delta_time_s * (m2_vel - m1_vel) / MBB_MC_DISTANCE_BETWEEN_WHEEL_SIDES;
+
+    mbb_mc_odom.x += delta_s * cos(mbb_mc_odom.yaw + delta_theta / 2); // trapzoidal integration
+    mbb_mc_odom.y += delta_s * sin(mbb_mc_odom.yaw + delta_theta / 2); // trapzoidal integration
+    mbb_mc_odom.yaw += delta_theta;
+    mbb_mc_odom.yaw = fmod(mbb_mc_odom.yaw, 2 * M_PI);
+    mbb_mc_odom.pitch = 0;
+    mbb_mc_odom.roll = 0;
+
+    ESP_LOGI(MBB_MC_LOG_TAG, "X: %f, Y: %f, Yaw: %f", mbb_mc_odom.x, mbb_mc_odom.y, mbb_mc_odom.yaw);
+
+    // prepare odom message
+    nav_msgs__msg__Odometry odom_msg = {};  // Initialize the local odometry message
+
+    // Initialize strings to avoid any garbage data
+    rosidl_runtime_c__String__init(&odom_msg.header.frame_id);
+    rosidl_runtime_c__String__init(&odom_msg.child_frame_id);
+    // Assign values to string fields
+    rosidl_runtime_c__String__assign(&odom_msg.header.frame_id, MBB_UROS_ODOM_FRAME_ID);
+    rosidl_runtime_c__String__assign(&odom_msg.child_frame_id, MBB_UROS_ODOM_CHILD_FRAME_ID);
+
+    odom_msg.header.stamp.sec = (int32_t)(current_time_ms / 1000); // convert to seconds
+    odom_msg.header.stamp.nanosec = (int32_t)((current_time_ms % 1000) * 1000000); // convert to nanoseconds
+
+    odom_msg.pose.pose.position.x = mbb_mc_odom.x;
+    odom_msg.pose.pose.position.y = mbb_mc_odom.y;
+
+    // convert yaw to quaternion
+    double cy = cos(mbb_mc_odom.yaw * 0.5);
+    double sy = sin(mbb_mc_odom.yaw * 0.5);
+    double cp = cos(mbb_mc_odom.pitch * 0.5);
+    double sp = sin(mbb_mc_odom.pitch * 0.5);
+    double cr = cos(mbb_mc_odom.roll * 0.5);
+    double sr = sin(mbb_mc_odom.roll * 0.5);
+
+    odom_msg.pose.pose.orientation.w = cy * cp * cr + sy * sp * sr;
+    odom_msg.pose.pose.orientation.x = cy * cp * sr - sy * sp * cr;
+    odom_msg.pose.pose.orientation.y = sy * cp * sr + cy * sp * cr;
+    odom_msg.pose.pose.orientation.z = sy * cp * cr - cy * sp * sr;
+
+
+    // ESP_LOGI(MBB_MC_LOG_TAG, "pos x: %f, pos y: %f, pos z: %f, ori x: %f, ori y: %f, ori z: %f, ori w: %f",\
+    //         odom_msg.pose.pose.position.x,\
+    //         odom_msg.pose.pose.position.y,\
+    //         odom_msg.pose.pose.position.z,\
+    //         odom_msg.pose.pose.orientation.x,\
+    //         odom_msg.pose.pose.orientation.y,\
+    //         odom_msg.pose.pose.orientation.z,\
+    //         odom_msg.pose.pose.orientation.w);
+
+
+    odom_msg.twist.twist.linear.x = delta_s / delta_time_s; // m/s
+    odom_msg.twist.twist.linear.y = 0;
+    odom_msg.twist.twist.linear.z = 0;
+    odom_msg.twist.twist.angular.x = 0;
+    odom_msg.twist.twist.angular.y = 0;
+    odom_msg.twist.twist.angular.z = delta_theta / delta_time_s; // rad/s
+
+
+    // ESP_LOGI(MBB_MC_LOG_TAG, "lin x: %f, lin y: %f, lin z: %f, ang x: %f, ang y: %f, ang z: %f",\
+    //         odom_msg.twist.twist.linear.x,\
+    //         odom_msg.twist.twist.linear.y,\
+    //         odom_msg.twist.twist.linear.z,\
+    //         odom_msg.twist.twist.angular.x,\
+    //         odom_msg.twist.twist.angular.y,\
+    //         odom_msg.twist.twist.angular.z);
+
+    memset(&odom_msg.pose.covariance, 0, sizeof(odom_msg.pose.covariance));
+
+    // Send odom to uROS, using overwrite to make sure the latest data for the topic is sent
+    xQueueOverwrite(mbb_uros_odom_queue, &odom_msg);
+
 }
 
 
@@ -95,7 +203,7 @@ static void mbb_mc_monitor_task(void *arg)
 
             }
         }
-        // vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 
     free(data);

@@ -135,8 +135,8 @@ typedef union{
 } mbb_mc_msg_rx_run_data_t;
 
 typedef struct{
-    double m1_rpm;
-    double m2_rpm;
+    int32_t m1_rpm;
+    int32_t m2_rpm;
     double current_m1;
     double current_m2;
     double temp_m1;
